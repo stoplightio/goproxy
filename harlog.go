@@ -95,6 +95,10 @@ func copyReadCloser(readCloser io.ReadCloser, len int64) (io.ReadCloser, io.Read
 	return ioutil.NopCloser(temp), ioutil.NopCloser(copy)
 }
 
+// LogToHARFile collects all the content from the Request/Response
+// roundtrip and stores it in memory until you call
+// `FlushHARToDisk(filename)`.. at which point it will all be flushed
+// to disk in HAR file format.
 func (ctx *ProxyCtx) LogToHARFile(captureContent bool) Next {
 	ctx.proxy.harFlusherRun.Do(func() {
 		go ctx.proxy.harLogAggregator()

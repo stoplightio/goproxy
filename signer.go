@@ -86,6 +86,12 @@ func signHost(ca *tls.Certificate, hosts []string) (cert tls.Certificate, err er
 	if derBytes, err = x509.CreateCertificate(&csprng, &template, x509ca, &certpriv.PublicKey, ca.PrivateKey); err != nil {
 		return
 	}
+
+	// fmt.Printf("Used CERT for host %s:\n%s\n\n", hosts[0], pem.EncodeToMemory(&pem.Block{
+	// 	Type:  "RSA PRIVATE KEY",
+	// 	Bytes: derBytes,
+	// }))
+
 	return tls.Certificate{
 		Certificate: [][]byte{derBytes, ca.Certificate[0]},
 		PrivateKey:  certpriv,

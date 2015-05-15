@@ -133,6 +133,7 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 			return nil, err
 		}
 		config.Certificates = append(config.Certificates, cert)
+		ctx.MITMGeneratedCert = &cert
 		return &config, nil
 	}
 }

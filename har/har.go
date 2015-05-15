@@ -13,12 +13,12 @@ import (
 var startingEntrySize int = 1000
 
 type Har struct {
-	HarLog HarLog `json:"harLog"`
+	HarLog HarLog `json:"log"`
 }
 
 type HarLog struct {
 	Version string     `json:"version"`
-	Creator string     `json:"creator"`
+	Creator HarCreator `json:"creator"`
 	Browser string     `json:"browser"`
 	Pages   []HarPage  `json:"pages"`
 	Entries []HarEntry `json:"entries"`
@@ -27,8 +27,10 @@ type HarLog struct {
 func NewHarLog() *HarLog {
 	harLog := HarLog{
 		Version: "1.2",
-		Creator: "GoProxy",
-		Browser: "",
+		Creator: HarCreator{
+			"GoProxy",
+			"12345",
+		},
 		Pages:   make([]HarPage, 0, 10),
 		Entries: makeNewEntries(),
 	}
@@ -55,6 +57,11 @@ func makeNewEntries() []HarEntry {
 	return make([]HarEntry, 0, startingEntrySize)
 }
 
+type HarCreator struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
 type HarPage struct {
 	Id              string         `json:"id"`
 	StartedDateTime time.Time      `json:"startedDateTime"`
@@ -63,7 +70,7 @@ type HarPage struct {
 }
 
 type HarEntry struct {
-	PageRef         string       `json:"pageRef"`
+	PageRef         string       `json:"pageRef,omitempty"`
 	StartedDateTime time.Time    `json:"startedDateTime"`
 	Time            int64        `json:"time"`
 	Request         *HarRequest  `json:"request"`

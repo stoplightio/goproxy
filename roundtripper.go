@@ -18,3 +18,12 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	return ctx.proxy.Transport.RoundTrip(req)
 }
+
+func wrapRoundTrip(req *http.Request, ctx *ProxyCtx) RoundTripper {
+	if ctx.RoundTripper != nil {
+		return ctx.RoundTripper
+	}
+	return RoundTripperFunc(func(req *http.Request, ctx *ProxyCtx) (*http.Response, error) {
+		return ctx.proxy.Transport.RoundTrip(req)
+	})
+}

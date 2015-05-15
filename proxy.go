@@ -1,14 +1,15 @@
 package goproxy
 
 import (
-	"bufio"
 	"crypto/tls"
-	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"sync"
 	"sync/atomic"
+
+	"github.com/abourget/goproxy/har"
 )
 
 // The basic proxy type. Implements http.Handler.
@@ -29,6 +30,12 @@ type ProxyHttpServer struct {
 	// NonProxyHandler will be used to handle direct connections to the proxy. You can assign an `http.ServeMux` or some other routing libs here.  The default will return a 500 error saying this is a proxy and has nothing to serve by itself.
 	NonProxyHandler http.Handler
 
+	// Logging and round-tripping
+	harLog          har.Har
+	harLogEntryCh   chan harReqAndResp
+	harFlushRequest chan string
+	harFlusherRun   sync.Once
+
 	// Custom transport to be used
 	Transport *http.Transport
 
@@ -40,23 +47,27 @@ type ProxyHttpServer struct {
 	ConnectDial func(network string, addr string) (net.Conn, error)
 }
 
-func copyHeaders(dst, src http.Header) {
-	for k, _ := range dst {
-		dst.Del(k)
+// New proxy server, logs to StdErr by default
+func NewProxyHttpServer() *ProxyHttpServer {
+	proxy := ProxyHttpServer{
+		Logger:           log.New(os.Stderr, "", log.LstdFlags),
+		requestHandlers:  []Handler{},
+		responseHandlers: []Handler{},
+		connectHandlers:  []Handler{},
+		NonProxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", 500)
+		}),
+		Transport: &http.Transport{TLSClientConfig: tlsClientSkipVerify,
+			Proxy: http.ProxyFromEnvironment},
+		MITMCertAuth: GoproxyCa,
+		harLog: har.Har{
+			HarLog: *(har.NewHarLog()),
+		},
+		harLogEntryCh:   make(chan harReqAndResp, 10),
+		harFlushRequest: make(chan string, 10),
 	}
-	for k, vs := range src {
-		for _, v := range vs {
-			dst.Add(k, v)
-		}
-	}
-}
-
-func isEof(r *bufio.Reader) bool {
-	_, err := r.Peek(1)
-	if err == io.EOF {
-		return true
-	}
-	return false
+	proxy.ConnectDial = dialerFromEnv(&proxy)
+	return &proxy
 }
 
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
@@ -97,22 +108,10 @@ func (proxy *ProxyHttpServer) ListenAndServe(addr string) error {
 	return http.ListenAndServe(addr, proxy)
 }
 
-// New proxy server, logs to StdErr by default
-func NewProxyHttpServer() *ProxyHttpServer {
-	proxy := ProxyHttpServer{
-		Logger:           log.New(os.Stderr, "", log.LstdFlags),
-		requestHandlers:  []Handler{},
-		responseHandlers: []Handler{},
-		connectHandlers:  []Handler{},
-		NonProxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", 500)
-		}),
-		Transport: &http.Transport{TLSClientConfig: tlsClientSkipVerify,
-			Proxy: http.ProxyFromEnvironment},
-		MITMCertAuth: GoproxyCa,
+func (proxy *ProxyHttpServer) Logf(msg string, v ...interface{}) {
+	if proxy.Verbose {
+		proxy.Logger.Printf("INFO: "+msg+"\n", v...)
 	}
-	proxy.ConnectDial = dialerFromEnv(&proxy)
-	return &proxy
 }
 
 // SetMITMCertAuth sets the CA to be used to sign man-in-the-middle'd

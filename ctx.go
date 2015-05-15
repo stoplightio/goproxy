@@ -27,10 +27,11 @@ type ProxyCtx struct {
 	IsThroughTunnel bool // Whether the current request is going through a CONNECT tunnel, doing HTTP calls (non-secure)
 
 	// Sniffed and non-sniffed hosts, cached here.
-	host         string
-	sniHost      string
-	sniffedTLS   bool
-	MITMCertAuth *tls.Certificate
+	host              string
+	sniHost           string
+	sniffedTLS        bool
+	MITMCertAuth      *tls.Certificate
+	MITMGeneratedCert *tls.Certificate // filled once request is signed..
 
 	// OriginalRequest holds a copy of the request before doing some HTTP tunnelling through CONNECT, or doing a man-in-the-middle attack.
 	OriginalRequest *http.Request
@@ -592,4 +593,23 @@ func (ctx *ProxyCtx) Charset() string {
 		return ""
 	}
 	return charsets[1]
+}
+
+func copyHeaders(dst, src http.Header) {
+	for k, _ := range dst {
+		dst.Del(k)
+	}
+	for k, vs := range src {
+		for _, v := range vs {
+			dst.Add(k, v)
+		}
+	}
+}
+
+func isEof(r *bufio.Reader) bool {
+	_, err := r.Peek(1)
+	if err == io.EOF {
+		return true
+	}
+	return false
 }

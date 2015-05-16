@@ -13,6 +13,7 @@ import (
 var startingEntrySize int = 1000
 
 // Schema defined in `Schema` tab here: http://www.softwareishard.com/har/viewer/
+// See http://www.softwareishard.com/blog/har-12-spec/ for specs.
 
 type Har struct {
 	Log Log `json:"log"`
@@ -107,7 +108,7 @@ type Request struct {
 	Cookies     []Cookie        `json:"cookies"`
 	Headers     []NameValuePair `json:"headers"`
 	QueryString []NameValuePair `json:"queryString"`
-	PostData    *PostData       `json:"postData"`
+	PostData    *PostData       `json:"postData,omitempty"`
 	BodySize    int64           `json:"bodySize"`
 	HeadersSize int64           `json:"headersSize"`
 }
@@ -180,17 +181,15 @@ func parsePostData(req *http.Request) *PostData {
 	harPostData.MimeType = contentType[0]
 
 	if len(req.PostForm) > 0 {
-		index := 0
-		params := make([]PostDataParam, len(req.PostForm))
-		for k, v := range req.PostForm {
-			param := PostDataParam{
-				Name:  k,
-				Value: strings.Join(v, ","),
+		for k, vals := range req.PostForm {
+			for _, v := range vals {
+				param := PostDataParam{
+					Name:  k,
+					Value: v,
+				}
+				harPostData.Params = append(harPostData.Params, param)
 			}
-			params[index] = param
-			index++
 		}
-		harPostData.Params = params
 	} else {
 		str, _ := ioutil.ReadAll(req.Body)
 		harPostData.Text = string(str)
@@ -237,7 +236,7 @@ type Response struct {
 	HttpVersion string          `json:"httpVersion"`
 	Cookies     []Cookie        `json:"cookies"`
 	Headers     []NameValuePair `json:"headers"`
-	Content     *Content        `json:"content"`
+	Content     Content         `json:"content"`
 	RedirectUrl string          `json:"redirectURL"`
 	BodySize    int64           `json:"bodySize"`
 	HeadersSize int64           `json:"headersSize"`
@@ -253,45 +252,46 @@ func ParseResponse(resp *http.Response, captureContent bool) *Response {
 	if len(resp.Status) > 4 {
 		statusText = resp.Status[4:]
 	}
+	redirectURL := resp.Header.Get("Location")
 	harResponse := Response{
 		Status:      resp.StatusCode,
 		StatusText:  statusText,
 		HttpVersion: resp.Proto,
 		Cookies:     parseCookies(resp.Cookies()),
 		Headers:     parseStringArrMap(resp.Header),
-		RedirectUrl: "",
+		RedirectUrl: redirectURL,
 		BodySize:    resp.ContentLength,
 		HeadersSize: calcHeaderSize(resp.Header),
 	}
 
 	if captureContent {
-		harResponse.Content = harParseContent(resp)
+		parseContent(resp, &harResponse.Content)
 	}
 
 	return &harResponse
 }
 
-func harParseContent(resp *http.Response) *Content {
+func parseContent(resp *http.Response, harContent *Content) {
 	defer func() {
 		if e := recover(); e != nil {
 			log.Printf("Error parsing response to %v: %v\n", resp.Request.URL, e)
 		}
 	}()
 
-	harContent := new(Content)
 	contentType := resp.Header["Content-Type"]
 	if contentType == nil {
 		panic("Missing content type in response")
 	}
 	harContent.MimeType = contentType[0]
-	if resp.ContentLength <= 0 {
+	if resp.ContentLength == 0 {
 		log.Println("Empty content")
-		return nil
+		return
 	}
 
 	body, _ := ioutil.ReadAll(resp.Body)
+	// put the "body" back in resp.Body, untouched
 	harContent.Text = string(body)
-	return harContent
+	return
 }
 
 type Cookie struct {
@@ -312,7 +312,7 @@ type NameValuePair struct {
 type PostData struct {
 	MimeType string          `json:"mimeType"`
 	Params   []PostDataParam `json:"params,omitempty"`
-	Text     string          `json:"text"`
+	Text     string          `json:"text,omitempty"`
 	Comment  string          `json:"comment,omitempty"`
 }
 

@@ -249,9 +249,13 @@ func ParseResponse(resp *http.Response, captureContent bool) *Response {
 		return nil
 	}
 
+	statusText := resp.Status
+	if len(resp.Status) > 4 {
+		statusText = resp.Status[4:]
+	}
 	harResponse := Response{
 		Status:      resp.StatusCode,
-		StatusText:  resp.Status,
+		StatusText:  statusText,
 		HttpVersion: resp.Proto,
 		Cookies:     parseCookies(resp.Cookies()),
 		Headers:     parseStringArrMap(resp.Header),

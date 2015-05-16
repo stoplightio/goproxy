@@ -24,6 +24,14 @@ func (proxy *ProxyHttpServer) harLogAggregator() {
 			harEntry.Response = har.ParseResponse(reqAndResp.resp, reqAndResp.captureContent)
 			harEntry.Time = reqAndResp.end.Sub(reqAndResp.start).Nanoseconds() / 1e6
 			harEntry.FillIPAddress(reqAndResp.req) // should take it from the actual conn?
+			if len(proxy.harLog.Log.Entries) == 0 {
+				proxy.harLog.AppendPage(har.Page{
+					ID:              "0",
+					StartedDateTime: harEntry.StartedDateTime,
+					Title:           "GoProxy Log",
+				})
+			}
+			harEntry.PageRef = "0"
 			proxy.harLog.AppendEntry(*harEntry)
 
 		case filename := <-proxy.harFlushRequest:
@@ -32,6 +40,7 @@ func (proxy *ProxyHttpServer) harLogAggregator() {
 				proxy.Logf("No HAR entries to flush")
 				continue
 			}
+
 			err := flushHarToDisk(proxy.harLog, filename)
 			if err != nil {
 				proxy.Logf("Error flushing HAR file to disk: %s", err)

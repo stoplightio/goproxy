@@ -43,19 +43,11 @@ func New() *Har {
 }
 
 func (har *Har) AppendEntry(entry ...Entry) {
-	entries := har.Log.Entries
-	m := len(entries)
-	n := m + len(entry)
-	if n > cap(entries) { // if necessary, reallocate
-		// allocate double what's needed, for future growth.
-		newEntries := make([]Entry, (n+1)*2)
-		copy(newEntries, entries)
-		entries = newEntries
-	}
-	entries = entries[0:n]
-	copy(entries[m:n], entry)
-	har.Log.Entries = entries
-	log.Println("Added entry ", entry[0].Request.Url)
+	har.Log.Entries = append(har.Log.Entries, entry...)
+}
+
+func (har *Har) AppendPage(page ...Page) {
+	har.Log.Pages = append(har.Log.Pages, page...)
 }
 
 func makeNewEntries() []Entry {
@@ -75,7 +67,7 @@ type Browser struct {
 }
 
 type Page struct {
-	Id              string      `json:"id,omitempty"`
+	ID              string      `json:"id,omitempty"`
 	StartedDateTime time.Time   `json:"startedDateTime"`
 	Title           string      `json:"title"`
 	PageTimings     PageTimings `json:"pageTimings"`

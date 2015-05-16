@@ -62,13 +62,14 @@ func (proxy *ProxyHttpServer) dispatchConnectHandlers(ctx *ProxyCtx) {
 
 		case MITM:
 			host := ctx.host
-			addPort := "80"
-			if ctx.Req.URL.Scheme == "https" {
-				addPort = "443"
-			}
 			if strings.IndexRune(host, ':') == -1 {
+				addPort := "80"
+				if ctx.Req.URL.Scheme == "https" {
+					addPort = "443"
+				}
 				host = host + addPort
 			}
+
 			err := ctx.ManInTheMiddle(host)
 			if err != nil {
 				ctx.Logf("error MITM'ing: %s", err)

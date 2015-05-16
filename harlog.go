@@ -97,6 +97,9 @@ func copyResp(resp *http.Response) (*http.Response, *http.Response) {
 }
 
 func copyReadCloser(readCloser io.ReadCloser, len int64) (io.ReadCloser, io.ReadCloser) {
+	if len < 0 {
+		len = 0
+	}
 	temp := bytes.NewBuffer(make([]byte, 0, len))
 	teeReader := io.TeeReader(readCloser, temp)
 	copy := bytes.NewBuffer(make([]byte, 0, len))
@@ -130,7 +133,7 @@ func (ctx *ProxyCtx) LogToHARFile(captureContent bool) Next {
 	ctx.RoundTripper = RoundTripperFunc(func(req *http.Request, ctx *ProxyCtx) (resp *http.Response, err error) {
 		resp, err = previousRoundTripper.RoundTrip(req, ctx)
 		//ctx.UserData["roundtripDetails"] = rtDetails
-		if captureContent && resp != nil && resp.ContentLength > 0 {
+		if captureContent && resp != nil && resp.ContentLength != 0 {
 			resp, reqAndResp.resp = copyResp(resp)
 		} else {
 			reqAndResp.resp = resp

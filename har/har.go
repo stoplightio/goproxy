@@ -219,11 +219,13 @@ func parseCookies(cookies []*http.Cookie) []Cookie {
 		harCookie := Cookie{
 			Name:     cookie.Name,
 			Domain:   cookie.Domain,
-			Expires:  cookie.Expires,
 			HttpOnly: cookie.HttpOnly,
 			Path:     cookie.Path,
 			Secure:   cookie.Secure,
 			Value:    cookie.Value,
+		}
+		if !cookie.Expires.IsZero() {
+			harCookie.Expires = &cookie.Expires
 		}
 		harCookies[i] = harCookie
 	}
@@ -291,17 +293,18 @@ func parseContent(resp *http.Response, harContent *Content) {
 	body, _ := ioutil.ReadAll(resp.Body)
 	// put the "body" back in resp.Body, untouched
 	harContent.Text = string(body)
+	harContent.Size = len(body)
 	return
 }
 
 type Cookie struct {
-	Name     string    `json:"name"`
-	Value    string    `json:"value"`
-	Path     string    `json:"path,omitempty"`
-	Domain   string    `json:"domain,omitempty"`
-	Expires  time.Time `json:"expires,omitempty"`
-	HttpOnly bool      `json:"httpOnly,omitempty"`
-	Secure   bool      `json:"secure,omitempty"`
+	Name     string     `json:"name"`
+	Value    string     `json:"value"`
+	Path     string     `json:"path,omitempty"`
+	Domain   string     `json:"domain,omitempty"`
+	Expires  *time.Time `json:"expires,omitempty"`
+	HttpOnly bool       `json:"httpOnly,omitempty"`
+	Secure   bool       `json:"secure,omitempty"`
 }
 
 type NameValuePair struct {
@@ -325,8 +328,8 @@ type PostDataParam struct {
 }
 
 type Content struct {
-	Size        int64  `json:"size"`
-	Compression int64  `json:"compression,omitempty"`
+	Size        int    `json:"size"`
+	Compression int    `json:"compression,omitempty"`
 	MimeType    string `json:"mimeType"`
 	Text        string `json:"text,omitempty"`
 	Encoding    string `json:"encoding,omitempty"`

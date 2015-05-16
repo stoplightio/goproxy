@@ -12,91 +12,119 @@ import (
 
 var startingEntrySize int = 1000
 
+// Schema defined in `Schema` tab here: http://www.softwareishard.com/har/viewer/
+
 type Har struct {
-	HarLog HarLog `json:"log"`
+	Log Log `json:"log"`
 }
 
-type HarLog struct {
-	Version string     `json:"version"`
-	Creator HarCreator `json:"creator"`
-	Browser string     `json:"browser"`
-	Pages   []HarPage  `json:"pages"`
-	Entries []HarEntry `json:"entries"`
+type Log struct {
+	Version string   `json:"version"`
+	Creator Creator  `json:"creator"`
+	Browser *Browser `json:"browser,omitempty"`
+	Pages   []Page   `json:"pages,omitempty"`
+	Entries []Entry  `json:"entries"`
+	Comment string   `json:"comment,omitempty"`
 }
 
-func NewHarLog() *HarLog {
-	harLog := HarLog{
-		Version: "1.2",
-		Creator: HarCreator{
-			"GoProxy",
-			"12345",
+func New() *Har {
+	har := &Har{
+		Log: Log{
+			Version: "1.2",
+			Creator: Creator{
+				Name:    "GoProxy",
+				Version: "12345",
+			},
+			Pages:   make([]Page, 0, 10),
+			Entries: makeNewEntries(),
 		},
-		Pages:   make([]HarPage, 0, 10),
-		Entries: makeNewEntries(),
 	}
-	return &harLog
+	return har
 }
 
-func (harLog *HarLog) AddEntry(entry ...HarEntry) {
-	entries := harLog.Entries
+func (har *Har) AppendEntry(entry ...Entry) {
+	entries := har.Log.Entries
 	m := len(entries)
 	n := m + len(entry)
 	if n > cap(entries) { // if necessary, reallocate
 		// allocate double what's needed, for future growth.
-		newEntries := make([]HarEntry, (n+1)*2)
+		newEntries := make([]Entry, (n+1)*2)
 		copy(newEntries, entries)
 		entries = newEntries
 	}
 	entries = entries[0:n]
 	copy(entries[m:n], entry)
-	harLog.Entries = entries
+	har.Log.Entries = entries
 	log.Println("Added entry ", entry[0].Request.Url)
 }
 
-func makeNewEntries() []HarEntry {
-	return make([]HarEntry, 0, startingEntrySize)
+func makeNewEntries() []Entry {
+	return make([]Entry, 0, startingEntrySize)
 }
 
-type HarCreator struct {
+type Creator struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
+	Comment string `json:"comment,omitempty"`
 }
 
-type HarPage struct {
-	Id              string         `json:"id"`
-	StartedDateTime time.Time      `json:"startedDateTime"`
-	Title           string         `json:"title"`
-	PageTimings     HarPageTimings `json:"pageTimings"`
+type Browser struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Comment string `json:"comment,omitempty"`
 }
 
-type HarEntry struct {
-	PageRef         string       `json:"pageRef,omitempty"`
-	StartedDateTime time.Time    `json:"startedDateTime"`
-	Time            int64        `json:"time"`
-	Request         *HarRequest  `json:"request"`
-	Response        *HarResponse `json:"response"`
-	Timings         HarTimings   `json:"timings"`
-	ServerIpAddress string       `json:"serverIpAddress"`
-	Connection      string       `json:"connection"`
+type Page struct {
+	Id              string      `json:"id,omitempty"`
+	StartedDateTime time.Time   `json:"startedDateTime"`
+	Title           string      `json:"title"`
+	PageTimings     PageTimings `json:"pageTimings"`
+	Comment         string      `json:"comment,omitempty"`
 }
 
-type HarRequest struct {
-	Method      string             `json:"method"`
-	Url         string             `json:"url"`
-	HttpVersion string             `json:"httpVersion"`
-	Cookies     []HarCookie        `json:"cookies"`
-	Headers     []HarNameValuePair `json:"headers"`
-	QueryString []HarNameValuePair `json:"queryString"`
-	PostData    *HarPostData       `json:"postData"`
-	BodySize    int64              `json:"bodySize"`
-	HeadersSize int64              `json:"headersSize"`
+type Entry struct {
+	PageRef         string    `json:"pageref,omitempty"`
+	StartedDateTime time.Time `json:"startedDateTime"`
+	Time            int64     `json:"time"`
+	Request         *Request  `json:"request"`
+	Response        *Response `json:"response"`
+	Cache           Cache     `json:"cache"`
+	Timings         Timings   `json:"timings"`
+	ServerIpAddress string    `json:"serverIpAddress,omitempty"`
+	Connection      string    `json:"connection,omitempty"`
+	Comment         string    `json:"comment,omitempty"`
 }
 
-func ParseRequest(req *http.Request, captureContent bool) *HarRequest {
+type Cache struct {
+	BeforeRequest *CacheEntry `json:"beforeRequest,omitempty"`
+	AfterRequest  *CacheEntry `json:"afterRequest,omitempty"`
+}
+
+type CacheEntry struct {
+	Expires    string `json:"expires,omitempty"`
+	LastAccess string `json:"lastAccess"`
+	ETag       string `json:"eTag"`
+	HitCount   int    `json:"hitCount"`
+	Comment    string `json:"comment,omitempty"`
+}
+
+type Request struct {
+	Method      string          `json:"method"`
+	Url         string          `json:"url"`
+	HttpVersion string          `json:"httpVersion"`
+	Cookies     []Cookie        `json:"cookies"`
+	Headers     []NameValuePair `json:"headers"`
+	QueryString []NameValuePair `json:"queryString"`
+	PostData    *PostData       `json:"postData"`
+	BodySize    int64           `json:"bodySize"`
+	HeadersSize int64           `json:"headersSize"`
+}
+
+func ParseRequest(req *http.Request, captureContent bool) *Request {
 	if req == nil {
 		return nil
 	}
-	harRequest := HarRequest{
+	harRequest := Request{
 		Method:      req.Method,
 		Url:         req.URL.String(),
 		HttpVersion: req.Proto,
@@ -114,7 +142,8 @@ func ParseRequest(req *http.Request, captureContent bool) *HarRequest {
 	return &harRequest
 }
 
-func (harEntry *HarEntry) FillIPAddress(req *http.Request) {
+// FillIPAddress resolves and adds the IP of the server
+func (harEntry *Entry) FillIPAddress(req *http.Request) {
 	host, _, err := net.SplitHostPort(req.URL.Host)
 	if err != nil {
 		host = req.URL.Host
@@ -144,14 +173,14 @@ func calcHeaderSize(header http.Header) int64 {
 	return int64(headerSize)
 }
 
-func parsePostData(req *http.Request) *HarPostData {
+func parsePostData(req *http.Request) *PostData {
 	defer func() {
 		if e := recover(); e != nil {
 			log.Printf("Error parsing request to %v: %v\n", req.URL, e)
 		}
 	}()
 
-	harPostData := new(HarPostData)
+	harPostData := new(PostData)
 	contentType := req.Header["Content-Type"]
 	if contentType == nil {
 		panic("Missing content type in request")
@@ -160,9 +189,9 @@ func parsePostData(req *http.Request) *HarPostData {
 
 	if len(req.PostForm) > 0 {
 		index := 0
-		params := make([]HarPostDataParam, len(req.PostForm))
+		params := make([]PostDataParam, len(req.PostForm))
 		for k, v := range req.PostForm {
-			param := HarPostDataParam{
+			param := PostDataParam{
 				Name:  k,
 				Value: strings.Join(v, ","),
 			}
@@ -177,13 +206,13 @@ func parsePostData(req *http.Request) *HarPostData {
 	return harPostData
 }
 
-func parseStringArrMap(stringArrMap map[string][]string) []HarNameValuePair {
+func parseStringArrMap(stringArrMap map[string][]string) []NameValuePair {
 	index := 0
-	harQueryString := make([]HarNameValuePair, len(stringArrMap))
+	harQueryString := make([]NameValuePair, len(stringArrMap))
 	for k, v := range stringArrMap {
 		escapedKey, _ := url.QueryUnescape(k)
 		escapedValues, _ := url.QueryUnescape(strings.Join(v, ","))
-		harNameValuePair := HarNameValuePair{
+		harNameValuePair := NameValuePair{
 			Name:  escapedKey,
 			Value: escapedValues,
 		}
@@ -193,10 +222,10 @@ func parseStringArrMap(stringArrMap map[string][]string) []HarNameValuePair {
 	return harQueryString
 }
 
-func parseCookies(cookies []*http.Cookie) []HarCookie {
-	harCookies := make([]HarCookie, len(cookies))
+func parseCookies(cookies []*http.Cookie) []Cookie {
+	harCookies := make([]Cookie, len(cookies))
 	for i, cookie := range cookies {
-		harCookie := HarCookie{
+		harCookie := Cookie{
 			Name:     cookie.Name,
 			Domain:   cookie.Domain,
 			Expires:  cookie.Expires,
@@ -210,24 +239,25 @@ func parseCookies(cookies []*http.Cookie) []HarCookie {
 	return harCookies
 }
 
-type HarResponse struct {
-	Status      int                `json:"status"`
-	StatusText  string             `json:"statusText"`
-	HttpVersion string             `json:"httpVersion`
-	Cookies     []HarCookie        `json:"cookies"`
-	Headers     []HarNameValuePair `json:"headers"`
-	Content     *HarContent        `json:"content"`
-	RedirectUrl string             `json:"redirectUrl"`
-	BodySize    int64              `json:"bodySize"`
-	HeadersSize int64              `json:"headersSize"`
+type Response struct {
+	Status      int             `json:"status"`
+	StatusText  string          `json:"statusText"`
+	HttpVersion string          `json:"httpVersion"`
+	Cookies     []Cookie        `json:"cookies"`
+	Headers     []NameValuePair `json:"headers"`
+	Content     *Content        `json:"content"`
+	RedirectUrl string          `json:"redirectURL"`
+	BodySize    int64           `json:"bodySize"`
+	HeadersSize int64           `json:"headersSize"`
+	Comment     string          `json:"comment,omitempty"`
 }
 
-func ParseResponse(resp *http.Response, captureContent bool) *HarResponse {
+func ParseResponse(resp *http.Response, captureContent bool) *Response {
 	if resp == nil {
 		return nil
 	}
 
-	harResponse := HarResponse{
+	harResponse := Response{
 		Status:      resp.StatusCode,
 		StatusText:  resp.Status,
 		HttpVersion: resp.Proto,
@@ -245,14 +275,14 @@ func ParseResponse(resp *http.Response, captureContent bool) *HarResponse {
 	return &harResponse
 }
 
-func harParseContent(resp *http.Response) *HarContent {
+func harParseContent(resp *http.Response) *Content {
 	defer func() {
 		if e := recover(); e != nil {
 			log.Printf("Error parsing response to %v: %v\n", resp.Request.URL, e)
 		}
 	}()
 
-	harContent := new(HarContent)
+	harContent := new(Content)
 	contentType := resp.Header["Content-Type"]
 	if contentType == nil {
 		panic("Missing content type in response")
@@ -268,53 +298,58 @@ func harParseContent(resp *http.Response) *HarContent {
 	return harContent
 }
 
-type HarCookie struct {
+type Cookie struct {
 	Name     string    `json:"name"`
 	Value    string    `json:"value"`
-	Path     string    `json:"path"`
-	Domain   string    `json:"domain"`
-	Expires  time.Time `json:"expires"`
-	HttpOnly bool      `json:"httpOnly"`
-	Secure   bool      `json:"secure"`
+	Path     string    `json:"path,omitempty"`
+	Domain   string    `json:"domain,omitempty"`
+	Expires  time.Time `json:"expires,omitempty"`
+	HttpOnly bool      `json:"httpOnly,omitempty"`
+	Secure   bool      `json:"secure,omitempty"`
 }
 
-type HarNameValuePair struct {
+type NameValuePair struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 }
 
-type HarPostData struct {
-	MimeType string             `json:"mimeType"`
-	Params   []HarPostDataParam `json:"params"`
-	Text     string             `json:"text"`
+type PostData struct {
+	MimeType string          `json:"mimeType"`
+	Params   []PostDataParam `json:"params,omitempty"`
+	Text     string          `json:"text"`
+	Comment  string          `json:"comment,omitempty"`
 }
 
-type HarPostDataParam struct {
+type PostDataParam struct {
 	Name        string `json:"name"`
-	Value       string `json:"value"`
-	FileName    string `json:"fileName"`
-	ContentType string `json:"contentType`
+	Value       string `json:"value,omitempty"`
+	FileName    string `json:"fileName,omitempty"`
+	ContentType string `json:"contentType,omitempty`
+	Comment     string `json:"comment,omitempty"`
 }
 
-type HarContent struct {
+type Content struct {
 	Size        int64  `json:"size"`
-	Compression int64  `json:"compression"`
+	Compression int64  `json:"compression,omitempty"`
 	MimeType    string `json:"mimeType"`
-	Text        string `json:"text"`
-	Encoding    string `json:"encoding"`
+	Text        string `json:"text,omitempty"`
+	Encoding    string `json:"encoding,omitempty"`
+	Comment     string `json:"comment,omitempty"`
 }
 
-type HarPageTimings struct {
-	OnContentLoad int64 `json:"onContentLoad"`
-	OnLoad        int64 `json:"onLoad"`
+type PageTimings struct {
+	OnContentLoad int64  `json:"onContentLoad"`
+	OnLoad        int64  `json:"onLoad"`
+	Comment       string `json:"comment,omitempty"`
 }
 
-type HarTimings struct {
-	Blocked int64
-	Dns     int64
-	Connect int64
-	Send    int64
-	Wait    int64
-	Receive int64
-	Ssl     int64
+type Timings struct {
+	Dns     int64  `json:"dns,omitempty"`
+	Blocked int64  `json:"blocked,omitempty"`
+	Connect int64  `json:"connect,omitempty"`
+	Send    int64  `json:"send"`
+	Wait    int64  `json:"wait"`
+	Receive int64  `json:"receive"`
+	Ssl     int64  `json:"ssl,omitempty"`
+	Comment string `json:"comment,omitempty"`
 }

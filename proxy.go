@@ -31,7 +31,7 @@ type ProxyHttpServer struct {
 	NonProxyHandler http.Handler
 
 	// Logging and round-tripping
-	harLog          har.Har
+	harLog          *har.Har
 	harLogEntryCh   chan harReqAndResp
 	harFlushRequest chan string
 	harFlusherRun   sync.Once
@@ -59,10 +59,8 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		}),
 		Transport: &http.Transport{TLSClientConfig: tlsClientSkipVerify,
 			Proxy: http.ProxyFromEnvironment},
-		MITMCertAuth: GoproxyCa,
-		harLog: har.Har{
-			HarLog: *(har.NewHarLog()),
-		},
+		MITMCertAuth:    GoproxyCa,
+		harLog:          har.New(),
 		harLogEntryCh:   make(chan harReqAndResp, 10),
 		harFlushRequest: make(chan string, 10),
 	}

@@ -18,28 +18,28 @@ func (proxy *ProxyHttpServer) harLogAggregator() {
 		select {
 		case reqAndResp := <-proxy.harLogEntryCh:
 
-			harEntry := new(har.HarEntry)
+			harEntry := new(har.Entry)
 			harEntry.Request = har.ParseRequest(reqAndResp.req, reqAndResp.captureContent)
 			harEntry.StartedDateTime = reqAndResp.start
 			harEntry.Response = har.ParseResponse(reqAndResp.resp, reqAndResp.captureContent)
 			harEntry.Time = reqAndResp.end.Sub(reqAndResp.start).Nanoseconds() / 1e6
-			harEntry.FillIPAddress(reqAndResp.req)
-			proxy.harLog.HarLog.AddEntry(*harEntry)
+			harEntry.FillIPAddress(reqAndResp.req) // should take it from the actual conn?
+			proxy.harLog.AppendEntry(*harEntry)
 
 		case filename := <-proxy.harFlushRequest:
 			proxy.Logf("Received HAR flush request to %q", filename)
-			if len(proxy.harLog.HarLog.Entries) == 0 {
+			if len(proxy.harLog.Log.Entries) == 0 {
 				proxy.Logf("No HAR entries to flush")
 				continue
 			}
-			err := flushHarToDisk(&proxy.harLog, filename)
+			err := flushHarToDisk(proxy.harLog, filename)
 			if err != nil {
 				proxy.Logf("Error flushing HAR file to disk: %s", err)
 			} else {
 				proxy.Logf("Wrote HAR file to disk: %s", filename)
 			}
 
-			proxy.harLog.HarLog = *(har.NewHarLog()) // reset
+			proxy.harLog = har.New() // reset
 		}
 
 	}

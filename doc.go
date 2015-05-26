@@ -10,60 +10,78 @@ The proxy itself is simply an `net/http` handler.
 Typical usage is
 
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest(..conditions..).Do(..requesthandler..)
-	proxy.OnRequest(..conditions..).DoFunc(..requesthandlerFunction..)
-	proxy.OnResponse(..conditions..).Do(..responesHandler..)
-	proxy.OnResponse(..conditions..).DoFunc(..responesHandlerFunction..)
+	proxy.Verbose = true
+	proxy.HandleRequestFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		if ctx.Host() == "api.mixpanel.com" || ctx.Host() == "i.tkassets.com" {
+			ctx.SetDestinationHost("127.0.0.1:8080")
+			return goproxy.FORWARD
+		}
+		return goproxy.NEXT
+	})
+	proxy.HandleResponseFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		return goproxy.NEXT
+	})
 	proxy.ListenAndServe(":8080")
 
-Adding a header to each request
+Adding a header to each request:
 
-	proxy.OnRequest().DoFunc(func(r *http.Request,ctx *goproxy.ProxyCtx) (*http.Request, *http.Response){
-		r.Header.Set("X-GoProxy","1")
-		return r, nil
+	proxy.HandleRequestFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		ctx.Req.Header.Set("X-GoProxy","1")
+		return goproxy.NEXT
 	})
-
-Note that the function is called before the proxy sends the request to the server
 
 For printing the content type of all incoming responses
 
-	proxy.OnResponse().DoFunc(func(r *http.Response, ctx *goproxy.ProxyCtx)*http.Response{
-		println(ctx.Req.Host,"->",r.Header.Get("Content-Type"))
-		return r
+	proxy.HandleResponseFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		fmt.Println(ctx.Req.Host, "->", ctx.Req.Header.Get("Content-Type"))
+		return goproxy.NEXT
 	})
 
-note that we used the ProxyCtx context variable here. It contains the request
-and the response (Req and Resp, Resp is nil if unavailable) of this specific client
-interaction with the proxy.
+Note the use of `ctx.Req` here.  The `ctx` holds `Req` and `Resp`.
+`Resp` can be nil if not available.
 
 To print the content type of all responses from a certain url, we'll add a
-ReqCondition to the OnResponse function:
+"middleware" before:
 
-	proxy.OnResponse(goproxy.UrlIsIn("golang.org/pkg")).DoFunc(func(r *http.Response, ctx *goproxy.ProxyCtx)*http.Response{
-		println(ctx.Req.Host,"->",r.Header.Get("Content-Type"))
-		return r
+	golangOrgOnly := goproxy.UrlHasPrefix("golang.org/pkg")
+	logInYourFace := func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		fmt.Println(ctx.Req.Host, "->", ctx.Req.Header.Get("Content-Type"))
+		return goproxy.NEXT
+	}
+	proxy.HandleResponseFunc(golangOrgOnly(logInYourFace))
+
+To invalide responses based on headers for example, you can:
+
+	proxy.HandleResponseFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		if ctx.Resp.Header.Get("X-GoProxy") == "" {
+			ctx.Resp.Close()
+			http.Error(ctx.ResponseWriter, "Denied.. didn't find an X-GoProxy header!", 403)
+			return goproxy.DONE
+		}
+		return goproxy.NEXT
 	})
 
-We can write the condition ourselves, conditions can be set on request and on response
+We close the body of the original repsonse, and return a new 403 response with a short message.
 
-	var random = ReqConditionFunc(func(r *http.Request) bool {
-		return rand.Intn(1) == 0
+You can catch traffic going through the proxy selectively, and write it to a HAR formatted file
+with this code:
+
+	proxy.HandleRequestFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		if ctx.Host() == "example.com" {
+			ctx.LogToHARFile(true)
+		}
+		return goproxy.NEXT
 	})
-	var hasGoProxyHeader = RespConditionFunc(func(resp *http.Response,req *http.Request)bool {
-		return resp.Header.Get("X-GoProxy") != ""
+	proxy.NonProxyHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/har" {
+			proxy.FlushHARToDisk("/tmp/file.har")
+			w.WriteHeader(201)
+			w.Write([]byte("hello world!\n"))
+		}
 	})
 
-Caution! If you give a RespCondition to the OnRequest function, you'll get a run time panic! It doesn't
-make sense to read the response, if you still haven't got it!
+You then "curl http://localhost:8888/har" to provoke a file flush to "/tmp/file.har".
 
-Finally, we have convenience function to throw a quick response
-
-	proxy.OnResponse(hasGoProxyHeader).DoFunc(func(r*http.Response,ctx *goproxy.ProxyCtx)*http.Response {
-		r.Body.Close()
-		return goproxy.ForbiddenTextResponse(ctx.Req,"Can't see response with X-GoProxy header!")
-	})
-
-we close the body of the original repsonse, and return a new 403 response with a short message.
 
 Example use cases:
 

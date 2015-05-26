@@ -79,6 +79,9 @@ func (proxy *ProxyHttpServer) dispatchConnectHandlers(ctx *ProxyCtx) {
 		case REJECT:
 			ctx.RejectConnect()
 
+		case DONE:
+			return
+
 		default:
 			panic(fmt.Sprintf("Invalid value %v for Next after calling %v", then, handler))
 		}

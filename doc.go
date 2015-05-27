@@ -12,13 +12,10 @@ Typical usage is
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = true
 	proxy.HandleRequestFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
-		if ctx.Host() == "api.mixpanel.com" || ctx.Host() == "i.tkassets.com" {
+		if ctx.Host() == "example.com" {
 			ctx.SetDestinationHost("127.0.0.1:8080")
 			return goproxy.FORWARD
 		}
-		return goproxy.NEXT
-	})
-	proxy.HandleResponseFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
 		return goproxy.NEXT
 	})
 	proxy.ListenAndServe(":8080")

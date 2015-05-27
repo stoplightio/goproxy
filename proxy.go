@@ -82,7 +82,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		proxy:          proxy,
 		MITMCertAuth:   proxy.MITMCertAuth,
 	}
-	ctx.host = r.URL.Host
+	ctx.host = r.URL.Host  // FIXME: should we add the port here ? with SNIHost we *do* add it
 
 	if r.Method == "CONNECT" {
 		proxy.dispatchConnectHandlers(ctx)

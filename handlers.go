@@ -5,9 +5,11 @@ package goproxy
 // In `request` handlers, `NEXT` means continue to the next handler.
 // If none are left, it continues on with `FORWARD`. If you return
 // `FORWARD`, then you skip all the other registered request handlers,
-// and forward the request directly.  If you return `REJECT`, the
-// library will return a 502 error to the requester.  In the `request`
-// handlers, returning `MITM` will panic.
+// and forward the request directly to the remote server, unless
+// you've set a `ctx.Resp` before, in which case the response is sent
+// back without touching any Response Handlers.  If you return
+// `REJECT`, the library will return a 502 error to the requester.  In
+// the `request` handlers, returning `MITM` will panic.
 //
 // In Response handlers, `NEXT` means continue with the other
 // registered handlers.  If this was the last, the library will finish

@@ -453,7 +453,7 @@ func TestMitmIsFiltered(t *testing.T) {
 	// PREVIOUSLY: proxy.OnRequest(goproxy.ReqHostIs(https.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
 	proxy.HandleRequest(goproxy.UrlIsIn("/momo")(goproxy.HandlerFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
 		ctx.NewTextResponse("koko")
-		return goproxy.NEXT
+		return goproxy.FORWARD
 	})))
 
 	client, l := oneShotProxy(proxy, t)
@@ -464,7 +464,7 @@ func TestMitmIsFiltered(t *testing.T) {
 	}
 
 	if resp := string(getOrFail(https.URL+"/bobo", client, t)); resp != "bobo" {
-		t.Error("But still /bobo should be bobo and not", resp)
+		t.Error("But still /bobo should be 'bobo' and not", resp)
 	}
 }
 

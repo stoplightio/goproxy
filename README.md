@@ -84,6 +84,20 @@ Here is a more complex/complete example:
         // or, return goproxy.FORWARD  // to short circuit other handlers, and continue on with forwarding
     })
 
+
+By setting Request Handlers, you can set a response directly and have
+it short-circuit the proxying to a remote server:
+
+    proxy.HandleRequestFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+        if ctx.URL.Path == "/super/bob" {
+            //ctx.NewResponse(...)
+            //ctx.NewHTMLResponse("<strong>welcome home</strong>")
+            ctx.NewTextResponse("welcome home")
+        }
+        return goproxy.FORWARD
+    })
+
+
 See additional examples in the examples directory.
 
 # What's New

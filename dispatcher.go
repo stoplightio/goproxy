@@ -103,6 +103,12 @@ func (proxy *ProxyHttpServer) dispatchRequestHandlers(ctx *ProxyCtx) {
 		case NEXT:
 			continue
 		case FORWARD:
+			if ctx.Resp != nil {
+				// We've got a Resp already, so short circuit the ResponseHandlers.
+				// TODO: do we need to do ForwardMITMResponse in some cases ? ctx.go:366
+				ctx.ForwardResponse(ctx.Resp)
+				return
+			}
 			break
 		case MITM:
 			panic("MITM doesn't make sense when we are already parsing the request")

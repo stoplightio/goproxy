@@ -1,9 +1,10 @@
 package goproxy
 
 import (
+	"crypto/tls"
 	"fmt"
-	"net"
 	"net/http"
+	"strings"
 )
 
 type RoundTripper interface {
@@ -24,7 +25,15 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	var tr http.RoundTripper
 	var addendum = ""
 	if ctx.fakeDestinationDNS != "" {
-		tr = &RedirectedTransport{ctx.proxy.Transport, ctx.fakeDestinationDNS, ctx}
+		req.URL.Host = ctx.fakeDestinationDNS
+
+		tr = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				ServerName:         strings.Split(ctx.host, ":")[0],
+				InsecureSkipVerify: true,
+			},
+			Proxy: ctx.proxy.Transport.Proxy,
+		}
 		addendum = fmt.Sprintf(", fakedns=%q", ctx.fakeDestinationDNS)
 	} else {
 		tr = ctx.proxy.Transport
@@ -44,17 +53,4 @@ func wrapRoundTrip(req *http.Request, ctx *ProxyCtx) RoundTripper {
 	return RoundTripperFunc(func(req *http.Request, ctx *ProxyCtx) (*http.Response, error) {
 		return ctx.proxy.Transport.RoundTrip(req)
 	})
-}
-
-type RedirectedTransport struct {
-	*http.Transport
-	redirectHost string
-	ctx          *ProxyCtx
-}
-
-func (rt *RedirectedTransport) Dial(network, addr string) (c net.Conn, err error) {
-	if addr != rt.redirectHost {
-		rt.ctx.Logf("Transport.Dial: lying to whom we're connecting to: saying %q while connecting to %q", addr, rt.redirectHost)
-	}
-	return net.Dial(network, rt.redirectHost)
 }

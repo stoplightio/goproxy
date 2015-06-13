@@ -9,7 +9,6 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
-	"net/http/httputil"
 	"regexp"
 	"strconv"
 	"strings"
@@ -56,8 +55,8 @@ type ProxyCtx struct {
 	// originalResponseBody holds the first Response.Body (the original Response) in the chain.  This possibly exists if `Resp` is not nil.
 	originalResponseBody io.ReadCloser
 
-	RoundTripper           RoundTripper
-	fakeDestinationDNS     string
+	RoundTripper       RoundTripper
+	fakeDestinationDNS string
 
 	// will contain the recent error that occured while trying to send receive or parse traffic
 	Error error
@@ -73,19 +72,17 @@ type ProxyCtx struct {
 }
 
 // SNIHost will try preempt the TLS handshake and try to sniff the
-// Server Name Indication.  It merely returns `Host()` for non CONNECT
-// requests, so it is always safe to call.
+// Server Name Indication.  It returns `Host()` for non CONNECT
+// requests, so it is always safe to call.  If it sniffed
+// successfully, but didn't find anything, it is possible to return an
+// empty string.
 func (ctx *ProxyCtx) SNIHost() string {
 	if ctx.Method != "CONNECT" {
 		return ctx.Host()
 	}
 
-	if ctx.sniHost != "" {
-		return ctx.sniHost
-	}
-
 	if ctx.sniffedTLS {
-		return ctx.Host()
+		return ctx.sniHost
 	}
 
 	ctx.Conn.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
@@ -103,8 +100,9 @@ func (ctx *ProxyCtx) SNIHost() string {
 
 	if sniHost != "" {
 		ctx.SetDestinationHost(inheritPort(sniHost, ctx.Host()))
+		ctx.sniHost = ctx.Host()
 	}
-	return ctx.Host()
+	return ctx.sniHost
 }
 
 // Host() returns the "host:port" to which your request will be
@@ -318,10 +316,10 @@ func (ctx *ProxyCtx) ManInTheMiddleHTTPS() error {
 
 			ctx.Logf("ManInTheMiddleHTTPS: r.Host=%q r.URL=%q ctx.host=%q", r.Host, r.URL.String(), ctx.host)
 
-			if ctx.proxy.Verbose {
-				data, _ := httputil.DumpRequestOut(subReq, true)
-				ctx.Logf("MITM request:\n%s", string(data))
-			}
+			// if ctx.proxy.Verbose {
+			// 	data, _ := httputil.DumpRequestOut(subReq, true)
+			// 	ctx.Logf("MITM request:\n%s", string(data))
+			// }
 
 			ctx.Req = subReq
 			ctx.IsThroughMITM = true

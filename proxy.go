@@ -60,7 +60,7 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		}),
 		Transport: &http.Transport{
 			TLSClientConfig: tlsClientSkipVerify,
-			Proxy: http.ProxyFromEnvironment,
+			Proxy:           http.ProxyFromEnvironment,
 		},
 		MITMCertAuth:    GoproxyCa,
 		harLog:          har.New(),

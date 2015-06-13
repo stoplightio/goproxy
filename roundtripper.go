@@ -26,15 +26,15 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	var addendum = ""
 	if ctx.fakeDestinationDNS != "" {
 		req.URL.Host = ctx.fakeDestinationDNS
-
-		tr = &http.Transport{
+		transport := &http.Transport{
 			TLSClientConfig: &tls.Config{
 				ServerName:         strings.Split(ctx.host, ":")[0],
 				InsecureSkipVerify: true,
 			},
 			Proxy: ctx.proxy.Transport.Proxy,
 		}
-		addendum = fmt.Sprintf(", fakedns=%q", ctx.fakeDestinationDNS)
+		addendum = fmt.Sprintf(", sni=%q, fakedns=%q", transport.TLSClientConfig.ServerName, ctx.fakeDestinationDNS)
+		tr = transport
 	} else {
 		tr = ctx.proxy.Transport
 	}

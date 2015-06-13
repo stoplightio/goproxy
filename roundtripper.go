@@ -1,6 +1,7 @@
 package goproxy
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 )
@@ -21,14 +22,15 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	var tr http.RoundTripper
-	if ctx.useRedirectedTransport {
-		tr = &RedirectedTransport{ctx.proxy.Transport, ctx.host, ctx}
-
+	var addendum = ""
+	if ctx.fakeDestinationDNS != "" {
+		tr = &RedirectedTransport{ctx.proxy.Transport, ctx.fakeDestinationDNS, ctx}
+		addendum = fmt.Sprintf(", fakedns=%q", ctx.fakeDestinationDNS)
 	} else {
 		tr = ctx.proxy.Transport
 	}
 
-	ctx.Logf("RoundTrip for req.URL=%q, req.Host=%q", req.URL, req.Host)
+	ctx.Logf("RoundTrip for req.URL=%q, req.Host=%q%s", req.URL, req.Host, addendum)
 	resp, err := tr.RoundTrip(req)
 	ctx.Logf("  RoundTrip returned: err=%v", err)
 

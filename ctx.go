@@ -57,7 +57,7 @@ type ProxyCtx struct {
 	originalResponseBody io.ReadCloser
 
 	RoundTripper           RoundTripper
-	useRedirectedTransport bool
+	fakeDestinationDNS     string
 
 	// will contain the recent error that occured while trying to send receive or parse traffic
 	Error error
@@ -102,10 +102,9 @@ func (ctx *ProxyCtx) SNIHost() string {
 	sniHost := tlsConn.Host()
 
 	if sniHost != "" {
-		ctx.sniHost = sniHost
-		ctx.SetDestinationHost(sniHost)
+		ctx.SetDestinationHost(inheritPort(sniHost, ctx.Host()))
 	}
-	return ctx.sniHost
+	return ctx.Host()
 }
 
 // Host() returns the "host:port" to which your request will be
@@ -136,8 +135,18 @@ func (ctx *ProxyCtx) Host() string {
 // is used as the `Host:` header. You can identify those requests with
 // `ctx.IsThroughMITM` or `ctx.IsThroughTunnel`.
 func (ctx *ProxyCtx) SetDestinationHost(host string) {
-	ctx.useRedirectedTransport = true
 	ctx.host = inheritPort(host, ctx.host)
+}
+
+// FakeDestinationDNS will force a connection to the specified host/ip
+// instead of the normal DNS resolution of the `SetDestinationHost()`.
+// This will assume the destination server will answer as if it was
+// ctx.Host().
+//
+// If you specify a port, it will also serve in the redirection,
+// otherwise the port from `ctx.Host()` will be used.
+func (ctx *ProxyCtx) FakeDestinationDNS(host string) {
+	ctx.fakeDestinationDNS = inheritPort(host, ctx.Host())
 }
 
 func (ctx *ProxyCtx) getConnectScheme() string {

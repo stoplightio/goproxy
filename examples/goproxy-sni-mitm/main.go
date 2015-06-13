@@ -39,7 +39,7 @@ func main() {
 	// test with: curl -v --proxy http://127.0.0.1:8080 -k https://example.com/
 
 	proxy.HandleRequestFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
-		if ctx.Host() == "example.com" {
+		if ctx.Host() == "example.com:80" {
 			ctx.Req.Host = "www.cheezburger.com"
 			ctx.Req.URL.Host = "www.cheezburger.com"
 			//ctx.SetDestinationHost("www.cheezburger.com:80")

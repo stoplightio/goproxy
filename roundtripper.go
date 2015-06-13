@@ -1,6 +1,9 @@
 package goproxy
 
-import "net/http"
+import (
+	"net"
+	"net/http"
+)
 
 type RoundTripper interface {
 	RoundTrip(req *http.Request, ctx *ProxyCtx) (*http.Response, error)
@@ -16,7 +19,20 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	if ctx.RoundTripper != nil {
 		return ctx.RoundTripper.RoundTrip(req, ctx)
 	}
-	return ctx.proxy.Transport.RoundTrip(req)
+
+	var tr http.RoundTripper
+	if ctx.useRedirectedTransport {
+		tr = &RedirectedTransport{ctx.proxy.Transport, ctx.host, ctx}
+
+	} else {
+		tr = ctx.proxy.Transport
+	}
+
+	ctx.Logf("RoundTrip for req.URL=%q, req.Host=%q", req.URL, req.Host)
+	resp, err := tr.RoundTrip(req)
+	ctx.Logf("  RoundTrip returned: err=%v", err)
+
+	return resp, err
 }
 
 func wrapRoundTrip(req *http.Request, ctx *ProxyCtx) RoundTripper {
@@ -26,4 +42,17 @@ func wrapRoundTrip(req *http.Request, ctx *ProxyCtx) RoundTripper {
 	return RoundTripperFunc(func(req *http.Request, ctx *ProxyCtx) (*http.Response, error) {
 		return ctx.proxy.Transport.RoundTrip(req)
 	})
+}
+
+type RedirectedTransport struct {
+	*http.Transport
+	redirectHost string
+	ctx          *ProxyCtx
+}
+
+func (rt *RedirectedTransport) Dial(network, addr string) (c net.Conn, err error) {
+	if addr != rt.redirectHost {
+		rt.ctx.Logf("Transport.Dial: lying to whom we're connecting to: saying %q while connecting to %q", addr, rt.redirectHost)
+	}
+	return net.Dial(network, rt.redirectHost)
 }

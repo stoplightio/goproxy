@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -57,8 +58,10 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		NonProxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", 500)
 		}),
-		Transport: &http.Transport{TLSClientConfig: tlsClientSkipVerify,
-			Proxy: http.ProxyFromEnvironment},
+		Transport: &http.Transport{
+			TLSClientConfig: tlsClientSkipVerify,
+			Proxy: http.ProxyFromEnvironment,
+		},
 		MITMCertAuth:    GoproxyCa,
 		harLog:          har.New(),
 		harLogEntryCh:   make(chan harReqAndResp, 10),
@@ -77,16 +80,23 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		SourceIP:       r.RemoteAddr, // pick it from somewhere else ? have a plugin to override this ?
 		Req:            r,
 		ResponseWriter: w,
-		UserData:       make(map[string]interface{}),
+		UserData:       make(map[string]string),
+		UserObjects:    make(map[string]interface{}),
 		Session:        atomic.AddInt64(&proxy.sess, 1),
 		proxy:          proxy,
 		MITMCertAuth:   proxy.MITMCertAuth,
 	}
-	ctx.host = r.URL.Host  // FIXME: should we add the port here ? with SNIHost we *do* add it
+	ctx.host = r.URL.Host
+	if strings.IndexRune(ctx.host, ':') == -1 {
+		if r.URL.Scheme == "http" {
+			ctx.host += ":80"
+		} else if r.URL.Scheme == "https" {
+			ctx.host += ":443"
+		}
+	}
 
 	if r.Method == "CONNECT" {
 		proxy.dispatchConnectHandlers(ctx)
-		//proxy.handleHttpsConnect(w, r)
 	} else {
 		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
 		if !r.URL.IsAbs() {

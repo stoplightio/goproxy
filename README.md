@@ -71,7 +71,7 @@ Here is a more complex/complete example:
 
 
     proxy.HandleConnectFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
-        if ctx.SNIHost() == "secure.example.com" {
+        if ctx.SNIHost() == "secure.example.com:443" {
             return goproxy.MITM
         }
         return goproxy.REJECT

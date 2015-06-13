@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"fmt"
 	"image"
 	"io"
 	"io/ioutil"
@@ -75,7 +76,9 @@ func localFile(url string) string { return fs.URL + "/" + url }
 func localTls(url string) string  { return https.URL + url }
 
 func TestSimpleHttpReqWithProxy(t *testing.T) {
-	client, s := oneShotProxy(goproxy.NewProxyHttpServer(), t)
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.Verbose = true
+	client, s := oneShotProxy(proxy, t)
 	defer s.Close()
 
 	if r := string(getOrFail(srv.URL+"/bobo", client, t)); r != "bobo" {
@@ -85,6 +88,7 @@ func TestSimpleHttpReqWithProxy(t *testing.T) {
 		t.Error("proxy server does not serve constant handlers", r)
 	}
 
+	// NOTE: This issues a CONNECT call, because it doesn't default to port 80 ??
 	if string(getOrFail(https.URL+"/bobo", client, t)) != "bobo" {
 		t.Error("TLS server does not serve constant handlers, when proxy is used")
 	}

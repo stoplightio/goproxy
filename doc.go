@@ -12,7 +12,7 @@ Typical usage is
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = true
 	proxy.HandleRequestFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
-		if ctx.Host() == "example.com" {
+		if ctx.Host() == "example.com:80" {
 			ctx.SetDestinationHost("127.0.0.1:8080")
 			return goproxy.FORWARD
 		}
@@ -64,7 +64,7 @@ You can catch traffic going through the proxy selectively, and write it to a HAR
 with this code:
 
 	proxy.HandleRequestFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
-		if ctx.Host() == "example.com" {
+		if ctx.Host() == "example.com:80" {
 			ctx.LogToHARFile(true)
 		}
 		return goproxy.NEXT

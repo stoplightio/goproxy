@@ -132,7 +132,7 @@ func (ctx *ProxyCtx) LogToHARFile(captureContent bool) Next {
 
 	ctx.RoundTripper = RoundTripperFunc(func(req *http.Request, ctx *ProxyCtx) (resp *http.Response, err error) {
 		resp, err = previousRoundTripper.RoundTrip(req, ctx)
-		//ctx.UserData["roundtripDetails"] = rtDetails
+		//ctx.UserObjects["roundtripDetails"] = rtDetails
 		if captureContent && resp != nil && resp.ContentLength != 0 {
 			resp, reqAndResp.resp = copyResp(resp)
 		} else {

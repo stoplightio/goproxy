@@ -9,7 +9,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
-	"net/url"
+	"net/http/httputil"
 	"regexp"
 	"strconv"
 	"strings"
@@ -27,11 +27,14 @@ type ProxyCtx struct {
 	IsThroughTunnel bool // Whether the current request is going through a CONNECT tunnel, doing HTTP calls (non-secure)
 
 	// Sniffed and non-sniffed hosts, cached here.
-	host              string
-	sniHost           string
+	host    string
+	sniHost string
+
 	sniffedTLS        bool
 	MITMCertAuth      *tls.Certificate
 	MITMGeneratedCert *tls.Certificate // filled once request is signed..
+
+	connectScheme string
 
 	// OriginalRequest holds a copy of the request before doing some HTTP tunnelling through CONNECT, or doing a man-in-the-middle attack.
 	OriginalRequest *http.Request
@@ -53,21 +56,25 @@ type ProxyCtx struct {
 	// originalResponseBody holds the first Response.Body (the original Response) in the chain.  This possibly exists if `Resp` is not nil.
 	originalResponseBody io.ReadCloser
 
-	RoundTripper RoundTripper
+	RoundTripper           RoundTripper
+	useRedirectedTransport bool
 
 	// will contain the recent error that occured while trying to send receive or parse traffic
 	Error error
 
-	// A handle for the user to keep data in the context, from the call of ReqHandler to the
-	// call of RespHandler
-	UserData map[string]interface{}
+	// UserObjects and UserData allow you to keep data between
+	// Connect, Request and Response handlers.
+	UserObjects map[string]interface{}
+	UserData    map[string]string
 
 	// Will connect a request to a response
 	Session int64
 	proxy   *ProxyHttpServer
 }
 
-// SNIHost will try preempt the TLS handshake and try to sniff the Server Name Indication.  This method will only sniff when handling a CONNECT request.
+// SNIHost will try preempt the TLS handshake and try to sniff the
+// Server Name Indication.  It merely returns `Host()` for non CONNECT
+// requests, so it is always safe to call.
 func (ctx *ProxyCtx) SNIHost() string {
 	if ctx.Method != "CONNECT" {
 		return ctx.Host()
@@ -95,32 +102,79 @@ func (ctx *ProxyCtx) SNIHost() string {
 	sniHost := tlsConn.Host()
 
 	if sniHost != "" {
-		ctx.sniHost = inheritPort(sniHost, ctx.Req.Host)
-		ctx.host = ctx.sniHost
+		ctx.sniHost = sniHost
+		ctx.SetDestinationHost(sniHost)
 	}
 	return ctx.sniHost
 }
 
-// Host will return the host without sniffing the SNI extension in the TLS negotiation.  You should use `SNIHost()` if you want to support that. Using this method ensures unaltered behavior for CONNECT calls to remote TCP endpoints.
+// Host() returns the "host:port" to which your request will be
+// forwarded. For a CONNECT request, it is preloaded with the original
+// request's "host:port". For other methods, it is preloaded with the
+// request's host and an added port based on the scheme (unless the
+// port was specified).
+//
+// If you sniff the SNI host with `ctx.SNIHost()`, it will alter the
+// value returned by `Host()` to reflect what was sniffed.  You need
+// that to properly MITM secure CONNECT calls, otherwise the remote
+// end will always fail to recognize the certificates this lib signs
+// on-the-fly.
+//
+// You can alter this value with `SetDestinationHost()`.
 func (ctx *ProxyCtx) Host() string {
 	return ctx.host
 }
 
-// SetDestinationHost sets the host IP/domain to which you're going to forward the request. If you want the request to be consistent for the remote host, make sure you also alter `ctx.Req.Host` to the same value.
+// SetDestinationHost sets the "host:port" to which you want to
+// FORWARD or MITM a CONNECT request.  Otherwise defaults to what was
+// in the `CONNECT` request. If you call `SNIHost()` to sniff SNI,
+// then this will override the destination host automatically.
+//
+// If you want to alter the destination host of a *Request* that goes
+// through a tunnel you can eavesdrop, modify `ctx.Req.URL.Host`, the
+// RoundTrip will go to that address, even though the `ctx.Req.Host`
+// is used as the `Host:` header. You can identify those requests with
+// `ctx.IsThroughMITM` or `ctx.IsThroughTunnel`.
 func (ctx *ProxyCtx) SetDestinationHost(host string) {
+	ctx.useRedirectedTransport = true
 	ctx.host = inheritPort(host, ctx.host)
+}
+
+func (ctx *ProxyCtx) getConnectScheme() string {
+	if ctx.connectScheme == "" {
+		if strings.HasSuffix(ctx.host, ":80") {
+			return "http"
+		} else {
+			return "https"
+		}
+	}
+	return ctx.connectScheme
+}
+
+// SetConnectScheme determines how to interprete the TCP conversation
+// following a CONNECT request. `scheme` can be "http" or "https". By
+// default, it uses a simple heuristic: "http" if CONNECT asked for
+// port 80, otherwise it always assumes "https" when trying to
+// man-in-the-middle. Call this before returning `MITM` from Connect
+// Handlers.
+func (ctx *ProxyCtx) SetConnectScheme(scheme string) {
+	if scheme != "http" && scheme != "https" {
+		panic(`invalid scheme passed to "SetConnectScheme", use "http" or "https" only.`)
+	}
+
+	ctx.connectScheme = scheme
 }
 
 // CONNECT handling methods
 
 // ManInTheMiddle triggers either a full-fledged MITM when done through HTTPS, otherwise, simply tunnels future HTTP requests through the CONNECT stream, dispatching calls to the Request Handlers
-func (ctx *ProxyCtx) ManInTheMiddle(host string) error {
+func (ctx *ProxyCtx) ManInTheMiddle() error {
 	if ctx.Method != "CONNECT" {
 		panic("method is not CONNECT")
 	}
 
-	if strings.HasSuffix(host, ":80") {
-		return ctx.TunnelHTTP(host)
+	if ctx.getConnectScheme() == "http" {
+		return ctx.TunnelHTTP()
 	} else {
 		return ctx.ManInTheMiddleHTTPS()
 	}
@@ -133,7 +187,7 @@ func (ctx *ProxyCtx) ManInTheMiddle(host string) error {
 // Requests flowing through this tunnel will be marked `ctx.IsThroughTunnel == true`.
 //
 // You can also find the original CONNECT request in `ctx.OriginalRequest`.
-func (ctx *ProxyCtx) TunnelHTTP(host string) error {
+func (ctx *ProxyCtx) TunnelHTTP() error {
 	if ctx.Method != "CONNECT" {
 		panic("method is not CONNECT")
 	}
@@ -143,9 +197,9 @@ func (ctx *ProxyCtx) TunnelHTTP(host string) error {
 	}
 
 	ctx.Logf("Assuming CONNECT is plain HTTP tunneling, mitm proxying it")
-	targetSiteConn, err := ctx.proxy.connectDial("tcp", host)
+	targetSiteConn, err := ctx.proxy.connectDial("tcp", ctx.host)
 	if err != nil {
-		ctx.Warnf("Error dialing to %s: %s", host, err.Error())
+		ctx.Warnf("Error dialing to %s: %s", ctx.host, err.Error())
 		return err
 	}
 
@@ -203,21 +257,19 @@ func (ctx *ProxyCtx) ManInTheMiddleHTTPS() error {
 		panic("method is not CONNECT")
 	}
 
-	ctx.Logf("Assuming CONNECT is TLS, MITM proxying it")
-
 	if !ctx.sniffedTLS {
 		ctx.Conn.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 	}
 
-	host := ctx.sniHost
-	if host == "" {
-		host = ctx.host
-		ctx.Warnf("No SNI host set, falling back on CONNECT host. To avoid that, call SNIHost() before doing MITM.")
+	signHost := ctx.sniHost
+	if signHost == "" {
+		signHost = ctx.host
+		ctx.Warnf("Sign Host: No SNI host sniffed, falling back to CONNECT host.  Risks being rejected by requester. To avoid that, call SNIHost() before doing MITM.")
 	}
 
-	tlsConfig, err := ctx.tlsConfig(host)
+	tlsConfig, err := ctx.tlsConfig(signHost)
 	if err != nil {
-		ctx.Logf("Couldn't configure TLS: %s", err)
+		ctx.Logf("Couldn't configure MITM TLS tunnel: %s", err)
 		ctx.httpError(err)
 		return err
 	}
@@ -243,19 +295,26 @@ func (ctx *ProxyCtx) ManInTheMiddleHTTPS() error {
 
 		clientTlsReader := bufio.NewReader(rawClientTls)
 		for !isEof(clientTlsReader) {
-			req, err := http.ReadRequest(clientTlsReader)
-			if err != nil && err != io.EOF {
-				return
-			}
+			// This reads a normal "GET / HTTP/1.1" request from the tunnel, as it thinks its
+			// talking directly to the server now, not to a proxy.
+			subReq, err := http.ReadRequest(clientTlsReader)
 			if err != nil {
-				ctx.Warnf("Cannot read TLS request from mitm'd client %v %v", r.Host, err)
+				ctx.Warnf("MandInTheMiddleHTTPS: error reading next request: %s", err)
 				return
 			}
-			req.RemoteAddr = r.RemoteAddr // since we're converting the request, need to carry over the original connecting IP as well
-			ctx.Logf("req %v", r.Host)
-			req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
 
-			ctx.Req = req
+			subReq.URL.Scheme = "https"
+			subReq.URL.Host = ctx.host
+			subReq.RemoteAddr = r.RemoteAddr // since we're converting the request, need to carry over the original connecting IP as well
+
+			ctx.Logf("ManInTheMiddleHTTPS: r.Host=%q r.URL=%q ctx.host=%q", r.Host, r.URL.String(), ctx.host)
+
+			if ctx.proxy.Verbose {
+				data, _ := httputil.DumpRequestOut(subReq, true)
+				ctx.Logf("MITM request:\n%s", string(data))
+			}
+
+			ctx.Req = subReq
 			ctx.IsThroughMITM = true
 
 			ctx.proxy.dispatchRequestHandlers(ctx)
@@ -278,16 +337,13 @@ func (ctx *ProxyCtx) HijackConnect() net.Conn {
 	return ctx.Conn
 }
 
-func (ctx *ProxyCtx) ForwardConnect(host string) error {
+func (ctx *ProxyCtx) ForwardConnect() error {
 	if ctx.Method != "CONNECT" {
 		return fmt.Errorf("Method is not CONNECT")
 	}
 
-	// TODO: fix up the port, if anyone changed it.. ensure we have a port.. or it matches the originally requested port (in the CONNECT call).
-	if !hasPort.MatchString(host) {
-		host += ":80"
-	}
-	targetSiteConn, err := ctx.proxy.connectDial("tcp", host)
+	ctx.Logf("ForwardConnect: dialing to %s", ctx.host)
+	targetSiteConn, err := ctx.proxy.connectDial("tcp", ctx.host)
 	if err != nil {
 		ctx.httpError(err)
 		return err
@@ -296,7 +352,6 @@ func (ctx *ProxyCtx) ForwardConnect(host string) error {
 	if !ctx.sniffedTLS {
 		ctx.Conn.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 	}
-	ctx.Logf("Accepting CONNECT to %s", host)
 	go ctx.copyAndClose(targetSiteConn, ctx.Conn)
 	go ctx.copyAndClose(ctx.Conn, targetSiteConn)
 	return nil
@@ -321,6 +376,9 @@ func (ctx *ProxyCtx) RejectConnect() {
 // Request handling
 
 func (ctx *ProxyCtx) ForwardRequest(host string) error {
+	// FIXME: we don't even use `host` here.. what's the point ?
+	ctx.Logf("Sending request %v %v with Host header %q", ctx.Req.Method, ctx.Req.URL.String(), ctx.Req.Host)
+
 	ctx.removeProxyHeaders()
 	resp, err := ctx.RoundTrip(ctx.Req)
 	ctx.Resp = resp
@@ -363,15 +421,14 @@ func (ctx *ProxyCtx) DispatchResponseHandlers() error {
 		return err
 	}
 
-	if ctx.IsThroughMITM && ctx.IsSecure {
-		return ctx.ForwardMITMResponse(ctx.Resp)
-	} else {
-		return ctx.ForwardResponse(ctx.Resp)
-	}
-	return nil
+	return ctx.ForwardResponse(ctx.Resp)
 }
 
 func (ctx *ProxyCtx) ForwardResponse(resp *http.Response) error {
+	if ctx.IsThroughMITM && ctx.IsSecure {
+		return ctx.forwardMITMResponse(ctx.Resp)
+	}
+
 	w := ctx.ResponseWriter
 
 	ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
@@ -396,7 +453,7 @@ func (ctx *ProxyCtx) ForwardResponse(resp *http.Response) error {
 	return nil
 }
 
-func (ctx *ProxyCtx) ForwardMITMResponse(resp *http.Response) error {
+func (ctx *ProxyCtx) forwardMITMResponse(resp *http.Response) error {
 	// TODO: clarify this... why would we mangle the response with chunk encodings, but only
 	// in the TLS MITM case ? isn't this arbitrary ?  Should we provide a user configurable
 	// option to do so ?
@@ -506,7 +563,6 @@ func (ctx *ProxyCtx) tlsConfig(host string) (*tls.Config, error) {
 func (ctx *ProxyCtx) removeProxyHeaders() {
 	r := ctx.Req
 	r.RequestURI = "" // this must be reset when serving a request with the client
-	ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
 
 	// If no Accept-Encoding header exists, Transport will add the headers it can accept
 	// and would wrap the response body with the relevant reader.

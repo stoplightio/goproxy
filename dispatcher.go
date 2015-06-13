@@ -3,10 +3,12 @@ package goproxy
 import (
 	"fmt"
 	"net/http"
-	"strings"
 )
 
-// HandleConnectFunc and HandleConnect mimic the `net/http` handlers, and register handlers for CONNECT proxy calls.
+// HandleConnectFunc and HandleConnect mimic the `net/http` handlers,
+// and register handlers for CONNECT proxy calls.
+//
+// See `Next` values for the return value meaning
 func (proxy *ProxyHttpServer) HandleConnectFunc(f func(ctx *ProxyCtx) Next) {
 	proxy.connectHandlers = append(proxy.connectHandlers, HandlerFunc(f))
 }
@@ -15,7 +17,11 @@ func (proxy *ProxyHttpServer) HandleConnect(f Handler) {
 	proxy.connectHandlers = append(proxy.connectHandlers, f)
 }
 
-// HandleRequestFunc and HandleRequest put hooks to handle certain requests. Note that MITM'd and HTTP requests that go through a CONNECT'd connection also go through those Request Handlers.
+// HandleRequestFunc and HandleRequest put hooks to handle certain
+// requests. Note that MITM'd and HTTP requests that go through a
+// CONNECT'd connection also go through those Request Handlers.
+//
+// See `Next` values for the return value meaning
 func (proxy *ProxyHttpServer) HandleRequestFunc(f func(ctx *ProxyCtx) Next) {
 	proxy.requestHandlers = append(proxy.requestHandlers, HandlerFunc(f))
 }
@@ -24,7 +30,11 @@ func (proxy *ProxyHttpServer) HandleRequest(f Handler) {
 	proxy.requestHandlers = append(proxy.requestHandlers, f)
 }
 
-// HandleResponseFunc and HandleResponse put hooks to handle certain requests. Note that MITM'd and HTTP requests that go through a CONNECT'd connection also go through those Response Handlers.
+// HandleResponseFunc and HandleResponse put hooks to handle certain
+// requests. Note that MITM'd and HTTP requests that go through a
+// CONNECT'd connection also go through those Response Handlers.
+//
+// See `Next` values for the return value meaning
 func (proxy *ProxyHttpServer) HandleResponseFunc(f func(ctx *ProxyCtx) Next) {
 	proxy.responseHandlers = append(proxy.responseHandlers, HandlerFunc(f))
 }
@@ -61,16 +71,7 @@ func (proxy *ProxyHttpServer) dispatchConnectHandlers(ctx *ProxyCtx) {
 			break
 
 		case MITM:
-			host := ctx.host
-			if strings.IndexRune(host, ':') == -1 {
-				addPort := "80"
-				if ctx.Req.URL.Scheme == "https" {
-					addPort = "443"
-				}
-				host = host + addPort
-			}
-
-			err := ctx.ManInTheMiddle(host)
+			err := ctx.ManInTheMiddle()
 			if err != nil {
 				ctx.Logf("error MITM'ing: %s", err)
 			}
@@ -87,7 +88,7 @@ func (proxy *ProxyHttpServer) dispatchConnectHandlers(ctx *ProxyCtx) {
 		}
 	}
 
-	if err := ctx.ForwardConnect(ctx.host); err != nil {
+	if err := ctx.ForwardConnect(); err != nil {
 		ctx.Logf("Failed forwarding in fallback clause: %s", err)
 	}
 }
@@ -105,7 +106,6 @@ func (proxy *ProxyHttpServer) dispatchRequestHandlers(ctx *ProxyCtx) {
 		case FORWARD:
 			if ctx.Resp != nil {
 				// We've got a Resp already, so short circuit the ResponseHandlers.
-				// TODO: do we need to do ForwardMITMResponse in some cases ? ctx.go:366
 				ctx.ForwardResponse(ctx.Resp)
 				return
 			}

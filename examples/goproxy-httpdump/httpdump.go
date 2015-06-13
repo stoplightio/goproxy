@@ -130,8 +130,8 @@ func NewLogger(basepath string) (*HttpLogger, error) {
 func (logger *HttpLogger) LogResp(resp *http.Response, ctx *goproxy.ProxyCtx) {
 	body := path.Join(logger.path, fmt.Sprintf("%d_resp", ctx.Session))
 	from := ""
-	if ctx.UserData != nil {
-		from = ctx.UserData.(*transport.RoundTripDetails).TCPAddr.String()
+	if ctx.UserObjects["details"] != nil {
+		from = ctx.UserObjects["details"].(*transport.RoundTripDetails).TCPAddr.String()
 	}
 	if resp == nil {
 		resp = emptyResp
@@ -243,7 +243,8 @@ func main() {
 	tr := transport.Transport{Proxy: transport.ProxyFromEnvironment}
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		ctx.RoundTripper = goproxy.RoundTripperFunc(func (req *http.Request, ctx *goproxy.ProxyCtx) (resp *http.Response, err error) {
-			ctx.UserData, resp, err = tr.DetailedRoundTrip(req)
+			details, resp, err = tr.DetailedRoundTrip(req)
+			ctx.UserObjects["details"] = details
 			return
 		})
 		logger.LogReq(req, ctx)

@@ -32,10 +32,10 @@ type ProxyHttpServer struct {
 	NonProxyHandler http.Handler
 
 	// Logging and round-tripping
-	harLog          *har.Har
-	harLogEntryCh   chan harReqAndResp
-	harFlushRequest chan string
-	harFlusherRun   sync.Once
+	harLog            *har.Har
+	harLogEntryCh     chan harReqAndResp
+	harFlushRequest   chan string
+	harFlusherRunOnce sync.Once
 
 	// Custom transport to be used
 	Transport *http.Transport

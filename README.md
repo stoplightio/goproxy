@@ -106,10 +106,14 @@ See additional examples in the examples directory.
 
   2. Ability to do optional SNI sniffing, and take action based on that information.
 
-  3. Ability to `Hijack` CONNECT requests. See
+  3. Ability to `FakeDestinationDNS()` and `SetDestinationHost()`.. to redirect requests.
+
+  4. Ability to save network flows in `.har` format. See http://www.softwareishard.com/har/viewer/ and view with this tool: http://ericduran.github.io/chromeHAR/
+
+  5. Ability to `Hijack` CONNECT requests. See
 [the eavesdropper example](https://github.com/elazarl/goproxy/blob/master/examples/goproxy-eavesdropper/main.go#L27)
 
-  4.  Transparent proxy support for http/https including MITM certificate generation for TLS.  See the [transparent example.](https://github.com/elazarl/goproxy/tree/master/examples/goproxy-transparent)
+  6. Transparent proxy support for http/https including MITM certificate generation for TLS.  See the [transparent example.](https://github.com/elazarl/goproxy/tree/master/examples/goproxy-transparent)
 
 # License
 

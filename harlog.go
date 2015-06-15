@@ -111,37 +111,15 @@ func copyReadCloser(readCloser io.ReadCloser, len int64) (io.ReadCloser, io.Read
 // roundtrip and stores it in memory until you call
 // `FlushHARToDisk(filename)`.. at which point it will all be flushed
 // to disk in HAR file format.
+//
+// LogToHARFile alwasy returns `NEXT`.
 func (ctx *ProxyCtx) LogToHARFile(captureContent bool) Next {
-	ctx.proxy.harFlusherRun.Do(func() {
+	ctx.proxy.harFlusherRunOnce.Do(func() {
 		go ctx.proxy.harLogAggregator()
 	})
 
-	//tr := transport.Transport{Proxy: transport.ProxyFromEnvironment}
-	reqAndResp := new(harReqAndResp)
-	reqAndResp.start = time.Now()
-	reqAndResp.captureContent = captureContent
-
-	req := ctx.Req
-	if captureContent && req.ContentLength > 0 {
-		req, reqAndResp.req = copyReq(req)
-	} else {
-		reqAndResp.req = req
-	}
-
-	previousRoundTripper := wrapRoundTrip(req, ctx)
-
-	ctx.RoundTripper = RoundTripperFunc(func(req *http.Request, ctx *ProxyCtx) (resp *http.Response, err error) {
-		resp, err = previousRoundTripper.RoundTrip(req, ctx)
-		//ctx.UserObjects["roundtripDetails"] = rtDetails
-		if captureContent && resp != nil && resp.ContentLength != 0 {
-			resp, reqAndResp.resp = copyResp(resp)
-		} else {
-			reqAndResp.resp = resp
-		}
-		reqAndResp.end = time.Now()
-		ctx.proxy.harLogEntryCh <- *reqAndResp
-		return resp, err
-	})
+	ctx.isLogEnabled = true
+	ctx.isLogWithContent = captureContent
 
 	return NEXT
 }

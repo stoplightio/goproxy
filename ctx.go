@@ -55,8 +55,15 @@ type ProxyCtx struct {
 	// originalResponseBody holds the first Response.Body (the original Response) in the chain.  This possibly exists if `Resp` is not nil.
 	originalResponseBody io.ReadCloser
 
+	// RoundTripper is used to send a request to a remote server when
+	// forwarding a Request.  If you set your own RoundTripper, then
+	// `FakeDestinationDNS` and `LogToHARFile` will have no effect.
 	RoundTripper       RoundTripper
 	fakeDestinationDNS string
+
+	// HAR logging
+	isLogEnabled     bool
+	isLogWithContent bool
 
 	// will contain the recent error that occured while trying to send receive or parse traffic
 	Error error
@@ -271,7 +278,9 @@ func (ctx *ProxyCtx) ManInTheMiddleHTTPS() error {
 	signHost := ctx.sniHost
 	if signHost == "" {
 		signHost = ctx.host
-		ctx.Warnf("Sign Host: No SNI host sniffed, falling back to CONNECT host.  Risks being rejected by requester. To avoid that, call SNIHost() before doing MITM.")
+		if !ctx.sniffedTLS {
+			ctx.Warnf("Sign Host: No SNI host sniffed, falling back to CONNECT host.  Risks being rejected by requester. To avoid that, call SNIHost() before doing MITM.")
+		}
 	}
 
 	tlsConfig, err := ctx.tlsConfig(signHost)

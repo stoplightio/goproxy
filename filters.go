@@ -106,7 +106,21 @@ func ReqHostMatches(regexps ...*regexp.Regexp) ChainedHandler {
 	}
 }
 
-
+// RequestHostContains is a middleware that tests whether the host to which
+// the request is directed to contains one of the given strings.
+//
+func RequestHostContains(hosts ...string) ChainedHandler {
+	return func(chainedHandler Handler) Handler {
+		return HandlerFunc(func(ctx *ProxyCtx) Next {
+			for _, b := range hosts {
+				if strings.Contains(ctx.Req.URL.Host, b) {
+					return chainedHandler.Handle(ctx)
+				}
+			}
+			return NEXT
+		})
+	}
+}
 
 // RequestHostIsIn is a middleware that tests whether the host to which
 // the request is directed to equal to one of the given strings.

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/abourget/goproxy/har"
+	"github.com/stoplightio/goproxy/har"
 )
 
 // The basic proxy type. Implements http.Handler.

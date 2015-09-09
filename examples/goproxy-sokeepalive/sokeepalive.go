@@ -5,7 +5,7 @@ import (
 	"log"
 	"net"
 
-	"github.com/abourget/goproxy"
+	"github.com/stoplightio/goproxy"
 )
 
 func main() {

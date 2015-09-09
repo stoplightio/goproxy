@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
-	"fmt"
 	"image"
 	"io"
 	"io/ioutil"
@@ -19,8 +18,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abourget/goproxy"
-	"github.com/abourget/goproxy/ext/image"
+	"github.com/stoplightio/goproxy"
+	"github.com/stoplightio/goproxy/ext/image"
 )
 
 var acceptAllCerts = &tls.Config{InsecureSkipVerify: true}

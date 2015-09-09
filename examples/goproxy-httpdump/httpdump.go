@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/abourget/goproxy"
-	"github.com/abourget/goproxy/transport"
+	"github.com/stoplightio/goproxy"
+	"github.com/stoplightio/goproxy/transport"
 )
 
 type FileStream struct {
@@ -242,7 +242,7 @@ func main() {
 	}
 	tr := transport.Transport{Proxy: transport.ProxyFromEnvironment}
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		ctx.RoundTripper = goproxy.RoundTripperFunc(func (req *http.Request, ctx *goproxy.ProxyCtx) (resp *http.Response, err error) {
+		ctx.RoundTripper = goproxy.RoundTripperFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (resp *http.Response, err error) {
 			details, resp, err = tr.DetailedRoundTrip(req)
 			ctx.UserObjects["details"] = details
 			return

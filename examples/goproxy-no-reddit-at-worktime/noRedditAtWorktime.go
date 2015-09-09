@@ -1,10 +1,11 @@
 package main
 
 import (
-	"github.com/abourget/goproxy"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/stoplightio/goproxy"
 )
 
 func main() {

@@ -11,8 +11,8 @@ import (
 	"net/url"
 	"regexp"
 
-	"github.com/abourget/goproxy"
 	"github.com/inconshreveable/go-vhost"
+	"github.com/stoplightio/goproxy"
 )
 
 func orPanic(err error) {

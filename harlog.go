@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/abourget/goproxy/har"
+	"github.com/stoplightio/goproxy/har"
 )
 
 func (proxy *ProxyHttpServer) harLogAggregator() {

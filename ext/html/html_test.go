@@ -1,13 +1,14 @@
 package goproxy_html_test
 
 import (
-	"github.com/abourget/goproxy"
-	"github.com/abourget/goproxy/ext/html"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
+
+	"github.com/stoplightio/goproxy"
+	"github.com/stoplightio/goproxy/ext/html"
 )
 
 type ConstantServer int

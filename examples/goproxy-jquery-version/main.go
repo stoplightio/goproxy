@@ -1,11 +1,11 @@
 package main
 
 import (
-	"github.com/abourget/goproxy"
-	"github.com/abourget/goproxy/ext/html"
 	"log"
-	"net/http"
 	"regexp"
+
+	"github.com/stoplightio/goproxy"
+	"github.com/stoplightio/goproxy/ext/html"
 )
 
 func findScriptSrc(html string) []string {

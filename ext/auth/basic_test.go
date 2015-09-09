@@ -14,8 +14,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/abourget/goproxy"
-	"github.com/abourget/goproxy/ext/auth"
+	"github.com/stoplightio/goproxy"
+	"github.com/stoplightio/goproxy/ext/auth"
 )
 
 type ConstantHandler string

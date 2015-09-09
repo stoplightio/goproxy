@@ -1,12 +1,13 @@
 package regretable_test
 
 import (
-	. "github.com/abourget/goproxy/regretable"
 	"bytes"
 	"io"
 	"io/ioutil"
 	"strings"
 	"testing"
+
+	. "github.com/stoplightio/goproxy/regretable"
 )
 
 func TestRegretableReader(t *testing.T) {
@@ -94,14 +95,14 @@ func TestRegretableFullRead(t *testing.T) {
 }
 
 func assertEqual(t *testing.T, expected, actual string) {
-	if expected!=actual {
+	if expected != actual {
 		t.Fatal("Expected", expected, "actual", actual)
 	}
 }
 
 func assertReadAll(t *testing.T, r io.Reader) string {
 	s, err := ioutil.ReadAll(r)
-	if err!=nil {
+	if err != nil {
 		t.Fatal("error when reading", err)
 	}
 	return string(s)
